@@ -6,12 +6,12 @@
 
 CREATE TABLE [stg].[FS_alt_ambito]
 (
- [alt_ambitoid]			NVARCHAR(4000)
+ [alt_ambitoid]			        NVARCHAR(4000)
 ,[alt_name]				NVARCHAR(4000)
-,[alt_integrationkeybc]	NVARCHAR(4000)
+,[alt_integrationkeybc]	                NVARCHAR(4000)
 ,[_alt_responsabilecommessaid_value] 	NVARCHAR(4000)
-,[_alt_areaid_value] 	NVARCHAR(4000)
-,[_alt_areatecnicaid_value] 	NVARCHAR(4000)
+,[_alt_areaid_value] 	                NVARCHAR(4000)
+,[_alt_areatecnicaid_value] 	        NVARCHAR(4000)
 )
 WITH (HEAP, DISTRIBUTION = ROUND_ROBIN)
 
@@ -20,7 +20,7 @@ WITH (HEAP, DISTRIBUTION = ROUND_ROBIN)
 
 CREATE TABLE [stg].[FS_incidents]
 (
-[ticketnumber] [nvarchar](4000) NULL,
+        [ticketnumber] [nvarchar](4000) NULL,
 	[title] [nvarchar](4000) NULL,
 	[_alt_ambitoid_value] [nvarchar](4000) NULL,
 	[_alt_categoriaticketutenteid_value] [nvarchar](4000) NULL,
@@ -131,7 +131,7 @@ WITH
 CREATE TABLE [stg].[FS_alt_company]
 (
  [alt_companyid]	NVARCHAR(4000)
-,[alt_name]			NVARCHAR(4000)
+,[alt_name]	        NVARCHAR(4000)
 ,[alt_codice]		NVARCHAR(4000)
 )
 WITH (HEAP, DISTRIBUTION = ROUND_ROBIN)
