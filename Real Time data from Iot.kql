@@ -1,5 +1,5 @@
 ﻿-- The source table is iothub_raw table. This table is alimentated every minute with data from Iot devices.
-The format of these data is JSON.
+The format of these data is JSON. The technology used is Azure Data Explorer with the Kusto Query Language syntax.
 
 Examples: 
 "enqueuetime","iothubdeviceid","rawdata"
