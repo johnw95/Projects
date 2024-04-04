@@ -1,0 +1,243 @@
+﻿-- The source table is iothub_raw table. This table is alimentated every minute with data from Iot devices.
+The format of these data is JSON.
+
+Examples: 
+"enqueuetime","iothubdeviceid","rawdata"
+"2024-04-04T09:18:32.013Z","torba-estrusore-BV92-5G","{""iothub-enqueuedtime"":""2024-04-04T09:18:32.0130000Z"",""iothub-connection-device-id"":""torba-estrusore-BV92-5G"",""sentOn"":1712222310966,""metrics"":{""dosatore_03_actiflow"":0,""ist_vibrazioni_riduttore"":0,""dosatore_07_ZMARCIA_timestamp"":1712222310851,""dosatore_05_contaore_assoluto"":4202,""contaore_rulliera_posizione_2_timestamp"":1712222310890,""dosatore_01_actiflow_timestamp"":1712222310900,""dosatore_02_descrizione_componente_03_timestamp"":1712222310766}}"
+
+
+
+--create table EstrusoriLastDay with data of current day. Power BI connect in direct query mode in order to show real-time data.
+
+create table EstrusoriLastDay (Timestamp: string, Time: string, Date: string, DeviceId: string, Lotto: string, Descrizione_lotto: string, Portata: real, Coppia: real, Giri_vite: real, Temperatura: real, Peso_siletto: real, Apertura_fermo: datetime, Chiusura_fermo: datetime, Stato_impianto2: string, Quantita_dosata: real, Message_type: string, Enqueuedtime: datetime, Energia_specifica_meccanica: real) 
+
+--create function EstrusoriLastDay to populate table EstrusoriLastDay
+
+
+.create-or-alter function  EstrusoriLastDay() {
+iothub_raw
+| where iothubdeviceid  in ("torba-estrusore-084-1","torba-estrusore-BV92-4G","torba-estrusore-BV92-5G", "torba-estrusore-BV70", "torba-estrusore-BV92-3G", "torba-estrusore-BV92-2G")
+| extend convert = datetime_utc_to_local(enqueuetime, 'Europe/Rome')//todatetime(format_datetime(enqueuetime, 'yyyy-MM-dd hh:mm:ss'))
+| where startofday(convert) == startofday(now(2h))
+| extend Timestamp = format_datetime(convert, 'yyyy-MM-dd HH:mm:ss')
+| extend Date = format_datetime(convert, 'yyyy-MM-dd')
+| extend Time = format_datetime(convert, 'HH:mm:ss')
+| extend DeviceId = case(iothubdeviceid == 'torba-estrusore-BV92-4G', "BV92-4G",
+                         iothubdeviceid == 'torba-estrusore-BV92-5G', "BV92-5G",
+                         iothubdeviceid == 'torba-estrusore-084-1',   "BV84-1G",
+                         iothubdeviceid == 'torba-estrusore-BV70',    "BV70-1G",
+                         iothubdeviceid == 'torba-estrusore-BV92-3G', "BV92-3G",
+                         iothubdeviceid == 'torba-estrusore-BV92-2G', "BV92-2G",
+                         "")
+| extend Stato_impianto = tostring(rawdata['metrics']['stato_impianto']) //stato
+| extend Lotto = trim("000000",tostring(rawdata['metrics']['lotto'])) //lotto
+| extend Message_type = tostring(rawdata['metrics']['message_type'])
+| extend Descrizione_lotto = tostring(rawdata['metrics']['descrizione_prodotto']) // descrizione lotto
+| extend Portata = todouble(rawdata['metrics']['portata']) // portata
+| extend Coppia = todouble(rawdata['metrics']['400-COPPIA']) //coppia
+| extend Giri_vite = todouble(rawdata['metrics']['ist_rpm']) //viti
+| extend Temperatura = todouble(rawdata['metrics']['temperatura_fuso'])
+| extend Potenza = todouble(rawdata['metrics']['400-POTENZA_KW'])
+| extend Energia_specifica_meccanica = todouble(rawdata['metrics']['400-ESP'])//Potenza/Portata
+| extend Peso_siletto = todouble(rawdata['metrics']['peso_siletto_completo'])
+| extend Apertura_fermo = datetime_utc_to_local(unixtime_seconds_todatetime(toreal(rawdata['metrics']['timestamp_apertura_fermo'])), 'Europe/Rome')
+| extend Chiusura_fermo = datetime_utc_to_local(unixtime_seconds_todatetime(toreal(rawdata['metrics']['timestamp_chiusura_fermo'])), 'Europe/Rome')
+| extend Stato_impianto2 = iif(Stato_impianto  in ("1", "2") and not( isnull(Apertura_fermo)) and isnull( Chiusura_fermo), "4", Stato_impianto) 
+|extend dosatore1_01 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_01']))
+|extend dosatore1_02 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_02']))
+|extend dosatore1_03 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_03']))
+|extend dosatore1_04 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_04']))
+|extend dosatore1_05 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_05']))
+|extend dosatore2_01 = iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_01']))
+|extend dosatore2_02 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_02'])) 
+|extend dosatore2_03 = iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_03']))
+|extend dosatore2_04 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_04']))
+|extend dosatore2_05 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_05']))
+|extend dosatore3_01 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_01']))
+|extend dosatore3_02 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_02']))
+|extend dosatore3_03 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_03']))
+|extend dosatore3_04 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_04']))
+|extend dosatore3_05 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_05']))
+|extend dosatore4_01 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_01']))
+|extend dosatore4_02 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_02']))
+|extend dosatore4_03 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_03']))
+|extend dosatore4_04 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_04']))
+|extend dosatore4_05 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_05']))
+|extend dosatore5_01 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_01']))
+|extend dosatore5_02 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_02'])) 
+|extend dosatore5_03 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_03']))
+|extend dosatore5_04 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_04']))
+|extend dosatore5_05 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_05']))
+|extend dosatore6_01 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_01']))
+|extend dosatore6_02 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_02']))
+|extend dosatore6_03 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_03']))
+|extend dosatore6_04 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_04']))
+|extend dosatore6_05 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_05']))
+|extend dosatore7_01 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_01']))
+|extend dosatore7_02 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_02']))
+|extend dosatore7_03 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_03']))
+|extend dosatore7_04 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_04']))
+|extend dosatore7_05 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_05']))
+|extend Quantita_dosata = 
+dosatore1_01 + 
+dosatore1_02 +
+dosatore1_03 +
+dosatore1_04 +
+dosatore1_05 + 
+dosatore2_01 +
+dosatore2_02 +
+dosatore2_03 +
+dosatore2_04 +
+dosatore2_05 +
+dosatore3_01 +
+dosatore3_02 +
+dosatore3_03 +
+dosatore3_04 +
+dosatore3_05 +
+dosatore4_01 +
+dosatore4_02 +
+dosatore4_03 +
+dosatore4_04 +
+dosatore4_05 +
+dosatore5_01 +
+dosatore5_02 + 
+dosatore5_03 +
+dosatore5_04 +
+dosatore5_05 +
+dosatore6_01 +
+dosatore6_02 +
+dosatore6_03 +
+dosatore6_04 +
+dosatore6_05 +
+dosatore7_01 +
+dosatore7_02 +
+dosatore7_03 +
+dosatore7_04 +
+dosatore7_05
+| project Timestamp, Time, Date, DeviceId, Lotto, Descrizione_lotto, Portata, Coppia, Giri_vite, Temperatura, Peso_siletto, Apertura_fermo, Chiusura_fermo, Stato_impianto2, Quantita_dosata, Message_type,
+ Enqueuedtime = convert, Energia_specifica_meccanica 
+}
+
+
+--create update policy to update every minute the table with last data received
+
+
+.alter table MyStructuredLogs policy update
+[{"IsEnabled":true, "Source":"iothub_raw","Query":"EstrusoriLastDay","IsTransactional":true}]
+
+
+--create table LastRecordsEstrusori, to show last record received for each Estrusore. Power bi connect to this table in direct query mode in order to show real-time data.
+
+.create table LastRecordsEstrusori (DeviceId: string, Stato_impianto: string, Lotto: string, Descrizione_lotto: string, OrarioInizioLotto: datetime, Portata: real, Coppia: real, Giri_vite: real, Energia_specifica_meccanica: real, Quantita_dosata: real, Timestamp: datetime) 
+
+-- create function LastRecordsEstrusori
+
+.create-or-alter function  LastRecordsEstrusori() {
+let Min1 = (iothub_raw
+| extend convert = datetime_utc_to_local(enqueuetime, 'Europe/Rome')
+| where startofday(convert) between(startofday(now(2h)-3d)..startofday(now(2h)))
+| where iothubdeviceid  in ("torba-estrusore-084-1","torba-estrusore-BV92-4G","torba-estrusore-BV92-5G", "torba-estrusore-BV70", "torba-estrusore-BV92-3G", "torba-estrusore-BV92-2G")
+| extend Lotto = trim("000000",tostring(rawdata['metrics']['lotto']))
+| summarize OrarioInizioLotto = min(convert) by Lotto); 
+iothub_raw
+| extend convert = datetime_utc_to_local(enqueuetime, 'Europe/Rome')
+| where startofday(convert) == startofday(now(2h))
+| where iothubdeviceid  in ("torba-estrusore-084-1","torba-estrusore-BV92-4G","torba-estrusore-BV92-5G", "torba-estrusore-BV70", "torba-estrusore-BV92-3G", "torba-estrusore-BV92-2G")
+| extend DeviceId = case(iothubdeviceid == 'torba-estrusore-BV92-4G', "BV92-4G",
+                         iothubdeviceid == 'torba-estrusore-BV92-5G', "BV92-5G",
+                         iothubdeviceid == 'torba-estrusore-084-1',   "BV84-1G",
+                         iothubdeviceid == 'torba-estrusore-BV70',    "BV70-1G",
+                         iothubdeviceid == 'torba-estrusore-BV92-3G', "BV92-3G",
+                         iothubdeviceid == 'torba-estrusore-BV92-2G', "BV92-2G",
+                         "")
+| extend Apertura_fermo = datetime_utc_to_local(unixtime_seconds_todatetime(toreal(rawdata['metrics']['timestamp_apertura_fermo'])), 'Europe/Rome')
+| extend Chiusura_fermo = datetime_utc_to_local(unixtime_seconds_todatetime(toreal(rawdata['metrics']['timestamp_chiusura_fermo'])), 'Europe/Rome')
+| extend Stato_impianto = tostring(rawdata['metrics']['stato_impianto']) //stato
+| extend Stato_impianto2 = iif(Stato_impianto  in ("1", "2") and not( isnull(Apertura_fermo)) and isnull( Chiusura_fermo), "4", Stato_impianto) 
+| extend Lotto = trim("000000",tostring(rawdata['metrics']['lotto']))
+| extend Descrizione_lotto = tostring(rawdata['metrics']['descrizione_prodotto']) 
+| extend Portata = todouble(rawdata['metrics']['portata']) // portata
+| extend Coppia = todouble(rawdata['metrics']['400-COPPIA']) //coppia
+| extend Giri_vite = todouble(rawdata['metrics']['ist_rpm'])
+| extend Energia_specifica_meccanica =  todouble(rawdata['metrics']['400-ESP'])
+|extend dosatore1_01 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_01']))
+|extend dosatore1_02 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_02']))
+|extend dosatore1_03 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_03']))
+|extend dosatore1_04 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_04']))
+|extend dosatore1_05 = iif(isempty(rawdata['metrics']['dosatore_01_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_01_quantita_dosata_05']))
+|extend dosatore2_01 = iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_01']))
+|extend dosatore2_02 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_02'])) 
+|extend dosatore2_03 = iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_03']))
+|extend dosatore2_04 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_04']))
+|extend dosatore2_05 =iif(isempty(rawdata['metrics']['dosatore_02_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_02_quantita_dosata_05']))
+|extend dosatore3_01 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_01']))
+|extend dosatore3_02 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_02']))
+|extend dosatore3_03 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_03']))
+|extend dosatore3_04 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_04']))
+|extend dosatore3_05 =iif(isempty(rawdata['metrics']['dosatore_03_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_03_quantita_dosata_05']))
+|extend dosatore4_01 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_01']))
+|extend dosatore4_02 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_02']))
+|extend dosatore4_03 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_03']))
+|extend dosatore4_04 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_04']))
+|extend dosatore4_05 =iif(isempty(rawdata['metrics']['dosatore_04_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_04_quantita_dosata_05']))
+|extend dosatore5_01 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_01']))
+|extend dosatore5_02 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_02'])) 
+|extend dosatore5_03 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_03']))
+|extend dosatore5_04 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_04']))
+|extend dosatore5_05 =iif(isempty(rawdata['metrics']['dosatore_05_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_05_quantita_dosata_05']))
+|extend dosatore6_01 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_01']))
+|extend dosatore6_02 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_02']))
+|extend dosatore6_03 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_03']))
+|extend dosatore6_04 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_04']))
+|extend dosatore6_05 =iif(isempty(rawdata['metrics']['dosatore_06_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_06_quantita_dosata_05']))
+|extend dosatore7_01 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_01']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_01']))
+|extend dosatore7_02 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_02']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_02']))
+|extend dosatore7_03 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_03']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_03']))
+|extend dosatore7_04 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_04']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_04']))
+|extend dosatore7_05 =iif(isempty(rawdata['metrics']['dosatore_07_quantita_dosata_05']), todouble(0), todouble(rawdata['metrics']['dosatore_07_quantita_dosata_05']))
+|extend Quantita_dosata = 
+dosatore1_01 + 
+dosatore1_02 +
+dosatore1_03 +
+dosatore1_04 +
+dosatore1_05 + 
+dosatore2_01 +
+dosatore2_02 +
+dosatore2_03 +
+dosatore2_04 +
+dosatore2_05 +
+dosatore3_01 +
+dosatore3_02 +
+dosatore3_03 +
+dosatore3_04 +
+dosatore3_05 +
+dosatore4_01 +
+dosatore4_02 +
+dosatore4_03 +
+dosatore4_04 +
+dosatore4_05 +
+dosatore5_01 +
+dosatore5_02 + 
+dosatore5_03 +
+dosatore5_04 +
+dosatore5_05 +
+dosatore6_01 +
+dosatore6_02 +
+dosatore6_03 +
+dosatore6_04 +
+dosatore6_05 +
+dosatore7_01 +
+dosatore7_02 +
+dosatore7_03 +
+dosatore7_04 +
+dosatore7_05
+|summarize arg_max(convert, DeviceId, Stato_impianto2, Lotto, Descrizione_lotto, Portata, Coppia, Giri_vite, Energia_specifica_meccanica, Quantita_dosata) by DeviceId
+|join kind=leftouter Min1 on Lotto
+|project DeviceId, Stato_impianto = Stato_impianto2, Lotto, Descrizione_lotto, OrarioInizioLotto, Portata, Coppia, Giri_vite,
+ Energia_specifica_meccanica, Quantita_dosata, Timestamp = convert
+}
+
+
+-- create update policy to update every minute the table with last data received
+.alter table MyStructuredLogs policy update
+[{"IsEnabled":true, "Source":"iothub_raw","Query":"LastRecordsEstrusori","IsTransactional":true}]
